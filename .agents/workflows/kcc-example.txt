@@ -4,6 +4,48 @@ name: checklist-for-kind
 schedule: never
 mode: workflow
 cooldown: 2h
+preconditionScript: |
+  #!/bin/bash
+  # Precondition script to check if all related PRs and Issues are closed,
+  # excluding issue number 10588.
+
+  set -e
+  set -o pipefail
+
+  echo "Checking precondition for KCC migration..."
+  echo "RELATED_ISSUES: ${RELATED_ISSUES:-(none)}"
+
+  if [ -z "${RELATED_ISSUES}" ]; then
+    echo "No related issues to check."
+    exit 0
+  fi
+
+  # Convert comma-separated list into an array
+  IFS=',' read -ra ADDR <<< "${RELATED_ISSUES}"
+  for issue in "${ADDR[@]}"; do
+    # Trim whitespace
+    issue=$(echo "${issue}" | tr -d '[:space:]')
+    if [ -z "${issue}" ]; then
+      continue
+    fi
+
+    if [ "${issue}" = "10588" ]; then
+      echo "Excluding issue 10588 from checks."
+      continue
+    fi
+
+    echo "Checking status of issue/PR #${issue}..."
+    state=$(gh issue view "${issue}" --json state --jq .state 2>/dev/null || echo "UNKNOWN")
+    echo "State of #${issue} is: ${state}"
+
+    if [ "${state}" != "CLOSED" ] && [ "${state}" != "MERGED" ]; then
+      echo "Precondition failed: Issue/PR #${issue} is not closed (State: ${state})."
+      exit 1
+    fi
+  done
+
+  echo "All related issues/PRs are closed (excluding 10588)."
+  exit 0
 ---
 
 # Checklist for KCC Resource Kind Migration
